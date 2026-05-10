@@ -2,6 +2,8 @@ import json, time, schedule, os, csv
 from confluent_kafka import Producer
 from dide.config.kafka.firms_kafka_config import FIRMS_PRODUCER_CONFIG, FIRMS_TOPIC
 from dide.config.api.firms_api_config import (
+    FIRMS_URL,
+    FIRMS_REQUEST,
     FIRMS_FETCH_INTERVAL_MINUTES
 )
 # FIRMS_URL, FIRMS_REQUEST
@@ -36,25 +38,26 @@ def parse_csv_file(path: str):
             row["ingested_at"] = str(time.time())
             yield row
 
-# def try_fetch_api() -> tuple[bool, list]:
-#     """
-#     Eagerly fetch from API — returns (success, records).
-#     NOT a generator so exceptions are caught immediately.
-#     """
-#     try:
-#         resp = requests.get(FIRMS_URL, timeout=FIRMS_REQUEST["timeout"])
-#         resp.raise_for_status()
-#         lines = resp.text.strip().split("\n")
-#         headers = lines[0].split(",")
-#         records = []
-#         for line in lines[1:]:
-#             record = dict(zip(headers, line.split(",")))
-#             record["ingested_at"] = str(time.time())
-#             records.append(record)
-#         return True, records
-#     except Exception as e:
-#         print(f"[FIRMS] API unreachable ({e.__class__.__name__}) — falling back to local file")
-#         return False, []
+#### IF WE WANTED TO FETCH FROM THE API INSTEAD OF A LOCAL FILE, WE COULD UNCOMMENT THIS FUNCTION AND THE RELEVANT PARTS OF fetch_and_produce() BELOW.
+def try_fetch_api() -> tuple[bool, list]:
+    """
+    Eagerly fetch from API — returns (success, records).
+    NOT a generator so exceptions are caught immediately.
+    """
+    try:
+        resp = requests.get(FIRMS_URL, timeout=FIRMS_REQUEST["timeout"])
+        resp.raise_for_status()
+        lines = resp.text.strip().split("\n")
+        headers = lines[0].split(",")
+        records = []
+        for line in lines[1:]:
+            record = dict(zip(headers, line.split(",")))
+            record["ingested_at"] = str(time.time())
+            records.append(record)
+        return True, records
+    except Exception as e:
+        print(f"[FIRMS] API unreachable ({e.__class__.__name__}) — falling back to local file")
+        return False, []
 
 def produce_records(source):
     """Core produce loop — works with any iterable source."""
@@ -92,16 +95,17 @@ def produce_records(source):
 
 def fetch_and_produce():
     try:
-        # # try API first — eagerly, so exception is caught here
-        # success, records = try_fetch_api()
+        
+        # try API first — eagerly, so exception is caught here
+        success, records = try_fetch_api()
 
-        # if success:
-        #     print(f"[FIRMS] Fetched {len(records)} records from API")
-        #     produce_records(iter(records))
-        # else:
+        if success:
+            print(f"[FIRMS] Fetched {len(records)} records from API")
+            produce_records(iter(records))
+        else:
             # stream local file — no RAM issue
-        print(f"[FIRMS] Loading from local file: {LOCAL_FALLBACK}")
-        produce_records(parse_csv_file(LOCAL_FALLBACK))
+            print(f"[FIRMS] Loading from local file: {LOCAL_FALLBACK}")
+            produce_records(parse_csv_file(LOCAL_FALLBACK))
 
     except FileNotFoundError:
         print(f"[FIRMS] Local file not found: {LOCAL_FALLBACK}")
