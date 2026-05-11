@@ -14,30 +14,44 @@ from pyspark.sql.functions import (
 # TIMESTAMP FEATURES
 # =========================================================
 
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import (
+    col,
+    to_timestamp,
+    hour,
+    month,
+    dayofweek,
+    when,
+    lit,
+    floor,
+    expr
+)
+
+# =========================================================
+# TIMESTAMP FEATURES (FIXED)
+# =========================================================
+
 def add_timestamp_features(df: DataFrame) -> DataFrame:
 
     return (
         df
+
+        # acq_date is already a timestamp → keep only date part
+        .withColumn("base_date", to_timestamp(col("acq_date")))
+
+        # FIX: acq_time is like 24.0, 25.0 → convert to valid hour
+        .withColumn("clean_hour", floor(col("acq_time") % 24))
+
+        # rebuild timestamp properly
         .withColumn(
             "event_timestamp",
-            to_timestamp(
-                concat_ws(
-                    " ",
-                    col("acq_date"),
-                    col("acq_time")
-                ),
-                "yyyy-MM-dd HHmm"
-            )
+            expr("timestampadd(HOUR, clean_hour, base_date)")
         )
+
         .withColumn("event_hour", hour(col("event_timestamp")))
         .withColumn("event_month", month(col("event_timestamp")))
-        .withColumn(
-            "event_day_of_week",
-            dayofweek(col("event_timestamp"))
-        )
+        .withColumn("event_day_of_week", dayofweek(col("event_timestamp")))
     )
-
-
 # =========================================================
 # DAY/NIGHT FEATURES
 # =========================================================

@@ -7,9 +7,18 @@ from pyspark.ml.evaluation import RegressionEvaluator
 
 spark = SparkSession.builder.getOrCreate() # type: ignore[attr-defined]
 
-df = spark.read.format("delta").load(
-    "data/delta/gold/noaa_features"
-)
+try : 
+    df = spark.read.format("delta").load(
+        "data/delta/noaa"
+    )
+except Exception as e:
+    print(f"Error loading data: {e}")
+    df = spark.read.format("delta").load(
+        "data/delta/gold/noaa_features"
+    )
+
+
+
 season_indexer = StringIndexer(
     inputCol="season",
     outputCol="season_idx"

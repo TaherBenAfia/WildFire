@@ -3,8 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
-
+_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "127.0.0.1:9092")
 #session
 NOAA_SESSION_CONFIG = {
     "app_name": "WildFire-NOAA-Stream",

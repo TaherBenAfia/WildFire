@@ -1,4 +1,5 @@
 import json, time, schedule, os, csv
+from typing import Any
 from confluent_kafka import Producer
 from dide.config.kafka.firms_kafka_config import FIRMS_PRODUCER_CONFIG, FIRMS_TOPIC
 from dide.config.api.firms_api_config import (
@@ -29,14 +30,26 @@ producer = Producer({
 def delivery_report(err, msg):
     if err:
         print(f"[FIRMS] Delivery failed: {err}")
-
+def clean_value(v: str):
+    """Strip whitespace and replace GSOD missing sentinels with None."""
+    v = v.strip()   # ← this is the key fix
+    if v in {"9999.9", "999.9", "99.99", "999", "9999", ""}:
+        return None
+    try:
+        return float(v)
+    except ValueError:
+        return v
 def parse_csv_file(path: str):
-    """Stream local CSV row by row — memory efficient for 1.2M records."""
+    """Parse NOAA GSOD CSV — one row per station per day."""
     with open(path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            row["ingested_at"] = str(time.time())
-            yield row
+            record: dict[str, Any] = {}
+            for k, v in row.items():
+                clean_key = k.strip().replace('"', '')
+                record[clean_key] = clean_value(v)      # ← called here
+            record["ingested_at"] = float(time.time())
+            yield record
 
 #### IF WE WANTED TO FETCH FROM THE API INSTEAD OF A LOCAL FILE, WE COULD UNCOMMENT THIS FUNCTION AND THE RELEVANT PARTS OF fetch_and_produce() BELOW.
 def try_fetch_api() -> tuple[bool, list]:
@@ -51,8 +64,8 @@ def try_fetch_api() -> tuple[bool, list]:
         headers = lines[0].split(",")
         records = []
         for line in lines[1:]:
-            record = dict(zip(headers, line.split(",")))
-            record["ingested_at"] = str(time.time())
+            record = dict(zip(headers, [float(x) for x in line.split(",")]))
+            record["ingested_at"] = float(time.time()) 
             records.append(record)
         return True, records
     except Exception as e:

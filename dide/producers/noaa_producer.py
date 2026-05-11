@@ -30,14 +30,23 @@ producer = Producer({
 def delivery_report(err, msg):
     if err:
         print(f"[NOAA] Delivery failed: {err}")
-
 def parse_csv_file(path: str):
-    """Stream local CSV row by row — memory efficient for 1.2M records."""
     with open(path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            row["ingested_at"] = str(time.time())
-            yield row
+            record = {}
+            for k, v in row.items():
+                clean_key = k.strip().replace('"', '')  # keep uppercase
+                cleaned = v.strip()                     # ← strip spaces
+                if cleaned in {"9999.9", "999.9", "99.99", "999", "9999", ""}:
+                    record[clean_key] = None
+                else:
+                    try:
+                        record[clean_key] = float(cleaned)
+                    except ValueError:
+                        record[clean_key] = cleaned
+            record["ingested_at"] = float(time.time())  # ← float not str
+            yield record
 
 def try_fetch_api() -> tuple[bool, list]:
     """
